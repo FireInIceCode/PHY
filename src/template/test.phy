@@ -10,12 +10,16 @@
 <body>
     <py>
         echo("cookie:",cookies,end="\n")
-        echo("params:",params["a"],end="\n")
+        echo("params:",params,end="\n")
         echo("url:",url,end="\n")
         echo("method:",method,end="\n")
         echo("<a href='http://baidu.com'>百度</a>",end="\n")
-        for i in range(100):
-            echo(f"第{i}项",end="\n")
     </py>
+    <div style="height:200px;overflow:auto;">
+        <py>
+            for i in range(100):
+                echo(f"第{i}项",end="\n")
+        </py>
+    </div>
 </body>
 </html>
