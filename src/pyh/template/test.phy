@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title><py>
+        import random
+        echo(random.randint(0,100))
+    </py></title>
+</head>
+<body>
+    <py>
+        echo("cookie:",cookies,end="\n")
+        echo("params:",params["a"],end="\n")
+        echo("url:",url,end="\n")
+        echo("method:",method,end="\n")
+        echo("<a href='http://baidu.com'>百度</a>",end="\n")
+        for i in range(100):
+            echo(f"第{i}项",end="\n")
+    </py>
+</body>
+</html>
