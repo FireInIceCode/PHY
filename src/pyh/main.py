@@ -1,95 +1,128 @@
 import os
 import sys
 import re
+from io import BytesIO
 
 import fastapi
+import uvicorn
 import pretty_errors
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse, FileResponse, StreamingResponse
 from starlette.requests import Request
 
 from . import functions
+from . import mediatype
 
 indent_re = re.compile("^\s*")
 
-app = fastapi.FastAPI()
 
+class PhyApp:
+    def __init__(self, debug=True):
+        self.app = fastapi.FastAPI()
+        self.phy = self.dev_phy if debug else self.rel_phy
 
-def get_html(el):
-    return unescape(html.tostring(el).decode("utf-8"))
+    def start(self, host="127.0.0.1", port=80):
+        uvicorn.run(self.app, host=host, port=port)
 
+    def scan_py(self, phy_text):
+        pos = []
+        pys = []
+        while "<py>" in phy_text:
+            start = phy_text.find("<py>")
+            end = phy_text.find("</py>")
+            py_text = phy_text[start+len("<py>"):end].strip("\n")
+            py_text_lns = py_text.split("\n")
+            default_indent = indent_re.match(py_text_lns[0]).span()[1]
+            for index, ln in enumerate(py_text_lns):
+                py_text_lns[index] = ln[default_indent:]
+            py_text = "\n".join(py_text_lns)
+            phy_text = phy_text[:start]+"$"+phy_text[end+len("</py>"):]
+            pys.append(py_text)
+            pos.append((start, end+len("</py>")))
+        return phy_text, pys, pos
 
-def get_inner(el):
-    text = get_html(el)
-    return text[text.find(">")+1:text.rfind("</")]
+    def run_py(self, phy_text, filepath, request, pos, pys):
+        html_text = phy_text
+        globals_dict = {
+            "__file__": filepath
+        }
 
-def scan_py(pyh_text):
-    pos=[]
-    pys=[]
-    while "<py>" in pyh_text:
-        start=pyh_text.find("<py>")
-        end=pyh_text.find("</py>")
-        py_text = pyh_text[start+len("<py>"):end].strip("\n")
-        py_text_lns = py_text.split("\n")
-        default_indent = indent_re.match(py_text_lns[0]).span()[1]
-        for index, ln in enumerate(py_text_lns):
-            py_text_lns[index] = ln[default_indent:]
-        py_text = "\n".join(py_text_lns)
-        pyh_text=pyh_text[:start]+"$"+pyh_text[end+len("</py>"):]
-        pys.append(py_text)
-        pos.append((start,end+len("</py>")))
-    return pyh_text,pys,pos
+        locals_dict = {
+            '__cookies__': request.cookies,
+            '__params__': request.query_params,
+            '__url__': request.url,
+            '__headers__': request.headers,
+            '__method__': request.method,
+            '__request__': request
+        }
+        for key in functions.namespace:
+            locals_dict[key] = functions.namespace[key]
 
-def run_py(pyh_text,filepath,request,pos,pys):
-    html_text=pyh_text
-    globals_dict = {
-        "__file__": filepath
-    }
+        df = 0
 
-    locals_dict = {
-        'cookies': request.cookies,
-        'params': request.query_params,
-        'url': request.url,
-        'headers': request.headers,
-        'method':request.method,
-        'request':request
-    }
-    for key in functions.namespace:
-        locals_dict[key]=functions.namespace[key]
+        for (start, end), py_text in zip(pos, pys):
+            output = ""
 
-    df=0
-
-    for (start,end),py_text in zip(pos,pys):
-        output = ""
-        def echo(*args,seq=" ",end=""):
-            nonlocal output
-            args=list(args)
-            for index,arg in enumerate(args):
-                args[index]=str(arg)
-            output += (seq.join(args)+end).replace("\n","<br>\n")
-        def exec_func():
-            try:
-                exec(py_text, globals_dict, locals_dict)
-            except Exception as e:
+            def echo(*args, seq=" ", end=""):
                 nonlocal output
-                output = "500 Server Error"
-                print(e)
-        globals_dict["echo"]=echo
-        exec_func()
-        html_text = html_text[:start+df]+output+html_text[start+df+1:]
-        df+=len(output)-1
-    return html_text
+                if type(output)!=str:
+                    raise ValueError("Output not is str,maybe you have being echo a file")
+                args = list(args)
+                for index, arg in enumerate(args):
+                    args[index] = str(arg)
+                output += (seq.join(args)+end).replace("\n", "<br>\n")    
 
+            def echofile(filepath_or_data,filetype=None):
+                nonlocal output
+                if type(filepath_or_data)==str:
+                    basedir=os.path.dirname(filepath)
+                    with open(os.path.join(basedir,filepath_or_data),"rb") as f:
+                        data=f.read()
+                    if not filetype:
+                        filetype=filepath_or_data.split(".")[-1]
+                else:
+                    data=filepath_or_data
+                buffer=BytesIO(data)
+                output=StreamingResponse(buffer,media_type=mediatype.mediatypetable.get(filetype,"applition/octrem-stream"))
 
-def pyh(webpath, filepath,methods=("get","post","put","delete")):
+            def exec_func():
+                try:
+                    exec(py_text, globals_dict, locals_dict)
+                except Exception as e:
+                    nonlocal output
+                    output = "500 Server Error"
+                    print(e)
+            
+            globals_dict["echo"] = echo
+            globals_dict["echofile"]=echofile
 
-    file_path = os.path.join(sys.path[0], filepath)
-    with open(file_path, encoding="utf-8") as file:
-        pyh_text = file.read()
-
-    pyh_text,pys,poses=scan_py(pyh_text)
-    
-    async def func(request: Request):
-        html_text=run_py(pyh_text,filepath,request,poses,pys)
+            exec_func()
+            if type(output)==str:
+                html_text = html_text[:start+df]+output+html_text[start+df+1:]
+                df += len(output)-1
+            else:
+                return output
         return Response(html_text, status_code=200, media_type="text/html")
-    for method in methods:
-        getattr(app,method)(webpath)(func)
+
+    def rel_phy(self, webpath, filepath, methods=("get", "post", "put", "delete")):
+        file_path = os.path.join(sys.path[0], filepath)
+        with open(file_path, encoding="utf-8") as file:
+            phy_text = file.read()
+
+        phy_text, pys, poses = self.scan_py(phy_text)
+
+        async def func(request: Request):
+            html_text = self.run_py(phy_text, filepath, request, poses, pys)
+            return Response(html_text, status_code=200, media_type="text/html")
+        for method in methods:
+            getattr(self.app, method)(webpath)(func)
+
+    def dev_phy(self, webpath, filepath, methods=("get", "post", "put", "delete")):
+        async def func(request: Request):
+            file_path = os.path.join(sys.path[0], filepath)
+            with open(file_path, encoding="utf-8") as file:
+                phy_text = file.read()
+
+            phy_text, pys, poses = self.scan_py(phy_text)
+            return self.run_py(phy_text, filepath, request, poses, pys)
+        for method in methods:
+            getattr(self.app, method)(webpath)(func)

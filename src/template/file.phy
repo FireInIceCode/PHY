@@ -1,0 +1,3 @@
+<py>
+echofile("./test.txt")
+</py>

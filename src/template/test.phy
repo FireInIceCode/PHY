@@ -9,11 +9,7 @@
 </head>
 <body>
     <py>
-        echo("cookie:",cookies,end="\n")
-        echo("params:",params,end="\n")
-        echo("url:",url,end="\n")
-        echo("method:",method,end="\n")
-        echo("<a href='http://baidu.com'>百度</a>",end="\n")
+        echo(abs(-1))
     </py>
     <div style="height:200px;overflow:auto;">
         <py>
