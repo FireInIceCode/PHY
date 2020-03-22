@@ -13,9 +13,19 @@
     </py>
     <div style="height:200px;overflow:auto;">
         <py>
-            for i in range(100):
+            for i in range(100,200):
                 echo(f"第{i}项",end="\n")
         </py>
     </div>
+    <py>
+        if random.randint(1,10)>5:
+            <label>
+                <div style="width: 100px; height:100px; background-color: red;">
+
+                </div>
+            </label>
+        eafas:
+            echo("你运气不好，没赶上！")
+    </py>
 </body>
 </html>

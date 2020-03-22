@@ -1,16 +1,17 @@
 import os
-import sys
 import re
+import sys
 from io import BytesIO
 
 import fastapi
-import uvicorn
 import pretty_errors
-from starlette.responses import Response, JSONResponse, FileResponse, StreamingResponse
+import uvicorn
 from starlette.requests import Request
+from starlette.responses import (FileResponse, JSONResponse, Response,
+                                 StreamingResponse)
 
-from . import functions
-from . import mediatype
+from . import functions, mediatype
+from .config import config
 
 indent_re = re.compile("^\s*")
 
@@ -23,21 +24,45 @@ class PhyApp:
     def start(self, host="127.0.0.1", port=80):
         uvicorn.run(self.app, host=host, port=port)
 
+    def setroot(self,rootpath):
+        rootpath=os.path.join(sys.path[0],rootpath).replace("\\","/")
+        def helper(dirpath,webpath="/"):
+            path=os.path.join(rootpath,dirpath)
+            for item in os.listdir(path):
+                itempath=os.path.join(path,item)
+                if os.path.isdir(itempath):
+                    helper(itempath,webpath+item+"/")
+                elif itempath[-3:]=="phy":
+                    print(f"Find phy file at {itempath},webpath is {webpath+item}")
+                    self.phy(webpath+item,itempath)
+                else:
+                    print(f"Find static file at {itempath},webpath is {webpath+item}")
+                    self.static(webpath+item,itempath)
+
+        helper(rootpath)
+
     def scan_py(self, phy_text):
         pos = []
         pys = []
-        while "<py>" in phy_text:
-            start = phy_text.find("<py>")
-            end = phy_text.find("</py>")
-            py_text = phy_text[start+len("<py>"):end].strip("\n")
+        while config["PYTHONLABELSTART"] in phy_text:
+            start = phy_text.find(config["PYTHONLABELSTART"])
+            end = phy_text.find(config["PYTHONLABELEND"])
+            py_text = phy_text[start+len(config["PYTHONLABELSTART"]):end].strip("\n")
             py_text_lns = py_text.split("\n")
             default_indent = indent_re.match(py_text_lns[0]).span()[1]
             for index, ln in enumerate(py_text_lns):
                 py_text_lns[index] = ln[default_indent:]
             py_text = "\n".join(py_text_lns)
-            phy_text = phy_text[:start]+"$"+phy_text[end+len("</py>"):]
+            
+            while config["HTMLLABELSTART"] in py_text:
+                label_start=py_text.find(config["HTMLLABELSTART"])
+                label_end=py_text.find(config["HTMLLABELEND"])
+                label_text=py_text[label_start+len(config["HTMLLABELSTART"]):label_end].strip("\n")
+                py_text=py_text[:label_start]+f"echo('''{label_text}''')"+py_text[label_end+len(config["HTMLLABELEND"]):]
+                
+            phy_text = phy_text[:start]+"$"+phy_text[end+len(config["PYTHONLABELEND"]):]
             pys.append(py_text)
-            pos.append((start, end+len("</py>")))
+            pos.append((start, end+len(config["PYTHONLABELEND"])))
         return phy_text, pys, pos
 
     def run_py(self, phy_text, filepath, request, pos, pys):
@@ -88,9 +113,11 @@ class PhyApp:
                 try:
                     exec(py_text, globals_dict, locals_dict)
                 except Exception as e:
+                    print(f"\nError at {filepath}:\n")
+                    print(py_text)
+                    print(str(type(e))[8:-2],":",e,"\n")
                     nonlocal output
-                    output = "500 Server Error"
-                    print(e)
+                    output=Response("500 Server Error",status_code=500,media_type="text/html")
             
             globals_dict["echo"] = echo
             globals_dict["echofile"]=echofile
@@ -111,8 +138,7 @@ class PhyApp:
         phy_text, pys, poses = self.scan_py(phy_text)
 
         async def func(request: Request):
-            html_text = self.run_py(phy_text, filepath, request, poses, pys)
-            return Response(html_text, status_code=200, media_type="text/html")
+            return self.run_py(phy_text, filepath, request, poses, pys)
         for method in methods:
             getattr(self.app, method)(webpath)(func)
 
@@ -126,3 +152,8 @@ class PhyApp:
             return self.run_py(phy_text, filepath, request, poses, pys)
         for method in methods:
             getattr(self.app, method)(webpath)(func)
+
+    def static(self,webpath,filepath):
+        async def func():
+            return FileResponse(filepath)
+        self.app.get(webpath)(func)
