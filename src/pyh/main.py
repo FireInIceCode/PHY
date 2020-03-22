@@ -143,6 +143,8 @@ class PhyApp:
                     sessions[session_id]=(globals_dict["__session__"],time.time()+(config["SESSIONMAXAGE"]))
                 else:
                     del sessions[session_id]
+                for cookie in globals_dict["__cookies__"]:
+                    response.set_cookie(cookie,globals_dict["cookies"][cookie])
                 return response
         response=Response(html_text, status_code=200, media_type="text/html")
         session_id=session_id or self.get_session_id()
@@ -151,6 +153,8 @@ class PhyApp:
             sessions[session_id]=(globals_dict["__session__"],time.time()+(config["SESSIONMAXAGE"]))
         elif sessions.get(session_id):
             del sessions[session_id]
+        for cookie in globals_dict["__cookies__"]:
+            response.set_cookie(cookie,globals_dict["cookies"][cookie])
         return response
 
     def rel_phy(self, webpath, filepath, methods=("get", "post", "put", "delete")):
