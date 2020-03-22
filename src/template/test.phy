@@ -11,6 +11,8 @@
             s["a"]=1
         echo(f"这是你第{s['a']}次访问此页面")
         s['a']+=1
+
+        __cookies__["abc"]="I am a big good man"
    </py> 
 </body>
 </html>

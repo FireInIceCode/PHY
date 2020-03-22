@@ -154,7 +154,7 @@ class PhyApp:
         elif sessions.get(session_id):
             del sessions[session_id]
         for cookie in globals_dict["__cookies__"]:
-            response.set_cookie(cookie,globals_dict["cookies"][cookie])
+            response.set_cookie(cookie,globals_dict["__cookies__"][cookie])
         return response
 
     def rel_phy(self, webpath, filepath, methods=("get", "post", "put", "delete")):
