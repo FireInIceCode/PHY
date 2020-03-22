@@ -1,0 +1,17 @@
+mediatypetable={
+    "bmp":"application/x-bmp",
+    "jpe":"image/jpeg",
+    "jpeg":"image/jpeg",
+    "jpg":"image/jpg",
+    "png":"image/png",
+    "gif":"image/gif",
+    "mp3":"audio/mp3",
+    "mp4":"audio/mp4",
+    "txt":"text/plain",
+    "swf":"application/x-shockwave-flash",
+    "svg":"text/xml",
+    "js":"application/x-javascript",
+    "css":"text/css",
+    "other":"application/octet-stream",
+    "json":"text/json"
+}

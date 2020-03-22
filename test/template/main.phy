@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>计算机科学社课程报名</title>
+        <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/4.3.1/css/bootstrap.min.css">
+        <link rel="stylesheet" href="./css/main.css">
+    </head>
+
+    <body>
+        <div class="bg">
+            <div class="text-center">
+                <h1 class="text-primary">
+                    计算机科学社课程报名
+                </h1>
+                <hr width="60%">
+            </div>
+            <div class="queue">
+                <py>
+                    import json,time
+                    with open("./main.dat",encoding="utf-8") as f:
+                        datas=json.loads(f.read())
+                    today=time.time()
+                    for data in datas["queue"]:
+                        ct=time.mktime(time.strptime(data["date"],"%Y/%m/%d"))
+                        if ct> today:
+                            <label>
+                                <div class="item">
+                                    主讲人:{data["name"]}<br>
+                                    主题:{data["theme"]}<br>
+                                    日期:{data["date"]}
+                                </div>
+                            </label>
+                        else:
+                            datas["queue"].remove(data)
+
+                    with open("./main.dat","w") as f:
+                        f.write(json.dumps(datas))
+                    
+                </py>
+            </div>
+            <form action="/class.phy" class="mx-auto" method="POST">
+                姓名:
+                <input type="text" class="form-control" name="name">
+                <br>
+                主题:
+                <input type="text" class="form-control" name="theme">
+                日期:
+                <input type="date" class="form-control" name="date">
+                口令:
+                <input type="password" class="form-control" name="pwd">
+                <input type="submit" class="form-control">
+            </form>
+        </div>
+    </body>
+
+</html>

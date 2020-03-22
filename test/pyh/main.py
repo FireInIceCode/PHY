@@ -9,7 +9,7 @@ import pretty_errors
 import uvicorn
 from starlette.requests import Request
 from starlette.responses import (FileResponse, JSONResponse, Response,
-                                 StreamingResponse)
+                                 StreamingResponse,RedirectResponse)
 
 from . import functions, mediatype
 from .config import config
@@ -62,7 +62,7 @@ class PhyApp:
                 label_start=py_text.find(config["HTMLLABELSTART"])
                 label_end=py_text.find(config["HTMLLABELEND"])
                 label_text=py_text[label_start+len(config["HTMLLABELSTART"]):label_end].strip("\n")
-                py_text=py_text[:label_start]+f"echo('''{label_text}''')"+py_text[label_end+len(config["HTMLLABELEND"]):]
+                py_text=py_text[:label_start]+f"echo(f'''{label_text}''')"+py_text[label_end+len(config["HTMLLABELEND"]):]
                 
             phy_text = phy_text[:start]+"$"+phy_text[end+len(config["PYTHONLABELEND"]):]
             pys.append(py_text)
@@ -73,10 +73,11 @@ class PhyApp:
         self._session_id+=1
         return hashlib.md5(str(self._session_id).encode("utf-8")).hexdigest()
 
-    def run_py(self, phy_text, filepath, request, pos, pys):
+    def run_py(self, phy_text, filepath, request, pos, pys,data):
         html_text = phy_text
         session_id=request.cookies.get(config["SESSIONIDNAME"])
         locals_dict={}
+
         globals_dict = {
             '__file__': filepath,
             '__cookies__': request.cookies,
@@ -85,7 +86,8 @@ class PhyApp:
             '__headers__': request.headers,
             '__method__': request.method,
             '__request__': request,
-            '__session__':sessions.get(session_id)[0] if sessions.get(session_id,(0,0))[1]>time.time() else {}
+            '__session__':sessions.get(session_id)[0] if sessions.get(session_id,(0,0))[1]>time.time() else {},
+            "__body__":data
         }
         for key in functions.namespace:
             globals_dict[key] = functions.namespace[key]
@@ -104,10 +106,10 @@ class PhyApp:
                 args = list(args)
                 for index, arg in enumerate(args):
                     args[index] = str(arg)
-                output += (seq.join(args)+end).replace("\n", "<br>\n")    
+                output += (seq.join(args)+end)
 
             def echofile(filepath_or_data,filetype=None):
-                nonlocal output
+                nonlocal response
                 if type(filepath_or_data)==str:
                     basedir=os.path.dirname(filepath)
                     with open(os.path.join(basedir,filepath_or_data),"rb") as f:
@@ -119,6 +121,16 @@ class PhyApp:
                 buffer=BytesIO(data)
                 response=StreamingResponse(buffer,media_type=mediatype.mediatypetable.get(filetype,"applition/octrem-stream"))
 
+            def echourl(url):
+                nonlocal response
+                response=RedirectResponse(url,status_code=302)
+
+            def fopen(*args,**kwargs):
+                basedir=os.path.dirname(filepath)
+                args=list(args)
+                args[0]=os.path.join(basedir,args[0])
+                return open(*args,**kwargs)
+
             def exec_func():
                 try:
                     exec(py_text, globals_dict, locals_dict)
@@ -128,9 +140,12 @@ class PhyApp:
                     print(str(type(e))[8:-2],":",e,"\n")
                     nonlocal output
                     response=Response("500 Server Error",status_code=500,media_type="text/html")
+                # exec(py_text, globals_dict, locals_dict)
             
             globals_dict["echo"] = echo
             globals_dict["echofile"]=echofile
+            globals_dict["echourl"]=echourl
+            globals_dict["open"]=fopen
 
             exec_func()
             if not response:
@@ -139,12 +154,12 @@ class PhyApp:
             else:
                 session_id=session_id or self.get_session_id()
                 response.set_cookie(config["SESSIONIDNAME"],session_id,max_age=config["SESSIONMAXAGE"])
-                if globals_dict.get("__session__"):
+                if globals_dict.get("__session__") is not None:
                     sessions[session_id]=(globals_dict["__session__"],time.time()+(config["SESSIONMAXAGE"]))
-                else:
+                elif sessions.get(session_id):
                     del sessions[session_id]
                 for cookie in globals_dict["__cookies__"]:
-                    response.set_cookie(cookie,globals_dict["cookies"][cookie])
+                    response.set_cookie(cookie,globals_dict["__cookies__"][cookie])
                 return response
         response=Response(html_text, status_code=200, media_type="text/html")
         session_id=session_id or self.get_session_id()
@@ -165,7 +180,14 @@ class PhyApp:
         phy_text, pys, poses = self.scan_py(phy_text)
 
         async def func(request: Request):
-            return self.run_py(phy_text, filepath, request, poses, pys)
+            try:
+                data=await request.form()
+            except:
+                try:
+                    data=await request.json()
+                except:
+                    data=await request.body()
+            return self.run_py(phy_text, filepath, request, poses, pys,data)
         for method in methods:
             getattr(self.app, method)(webpath)(func)
 
@@ -175,8 +197,16 @@ class PhyApp:
             with open(file_path, encoding="utf-8") as file:
                 phy_text = file.read()
 
+            try:
+                data=await request.form()
+            except:
+                try:
+                    data=await request.json()
+                except:
+                    data=await request.body()
+
             phy_text, pys, poses = self.scan_py(phy_text)
-            return self.run_py(phy_text, filepath, request, poses, pys)
+            return self.run_py(phy_text, filepath, request, poses, pys,data)
         for method in methods:
             getattr(self.app, method)(webpath)(func)
 

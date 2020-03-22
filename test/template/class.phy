@@ -1,0 +1,20 @@
+<py>
+    import json
+    pwd=__body__["pwd"]
+    if pwd!="rskdwxpt":
+        echo("密码错误")
+    else:
+        name=__body__["name"]
+        theme=__body__["theme"]
+        date=__body__["date"]
+        with open("./main.dat","r") as f:
+            obj=json.loads(f.read())
+            obj["queue"].append({
+                "name":name,
+                "theme":theme,
+                "date":date.replace("-","/")
+            })
+        with open("./main.dat","w") as f:
+            f.write(json.dumps(obj))
+    echourl("/main.phy")
+</py>
