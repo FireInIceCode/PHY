@@ -19,6 +19,7 @@
 还有两个内置方法:
 - echo(text:str,*args,seq=" ",end=""):使用类似print,返回请求
 - echofile:返回一个文件使用,一个参数,可以是相对于当前文件的文件路径,也可以是文件的bytes数据.
+- echourl:返回一个重定向请求,一个参数,url
 
 如果需要在py中使用html标签,可以使用<label></label>,在其中包裹html代码段,
 
